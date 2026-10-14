@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedido de ropa</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --txt:#1c1f24; --mut:#6b7280; --bd:#e3e6ea; --acc:#4f46e5;
+          --ok:#16a34a; --maybe:#d97706; --no:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161a; --card:#1e2127; --txt:#e8eaed; --mut:#9aa1ab; --bd:#2e333b; --acc:#818cf8; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 system-ui,Segoe UI,sans-serif; background:var(--bg); color:var(--txt); }
+  header { padding:14px 20px; border-bottom:1px solid var(--bd); background:var(--card); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; margin-right:auto; }
+  main { display:grid; grid-template-columns: 1fr 340px; gap:16px; padding:16px 20px; align-items:start; }
+  @media (max-width:980px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:14px; margin-bottom:16px; }
+  .card h2 { font-size:14px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); }
+  button, select, input, textarea { font:inherit; color:inherit; background:var(--card); border:1px solid var(--bd); border-radius:6px; padding:6px 10px; }
+  button { cursor:pointer; } button:hover { border-color:var(--acc); }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  button:disabled { opacity:.5; cursor:wait; }
+  textarea { width:100%; resize:vertical; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+  .item { border:2px solid var(--bd); border-radius:10px; overflow:hidden; background:var(--card); display:flex; flex-direction:column; }
+  .item.quedo { border-color:var(--ok); } .item.dudo { border-color:var(--maybe); } .item.descarto { opacity:.55; border-color:var(--no); }
+  .photo { height:170px; background:var(--bg); display:flex; align-items:center; justify-content:center; color:var(--mut); font-size:12px; cursor:pointer; position:relative; }
+  .photo img { width:100%; height:100%; object-fit:cover; }
+  .body { padding:8px; display:grid; gap:6px; }
+  .body input { width:100%; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .state { display:flex; gap:4px; }
+  .state button { flex:1; padding:4px 0; font-size:12px; }
+  .state button.on[data-s=quedo] { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .state button.on[data-s=dudo] { background:var(--maybe); color:#fff; border-color:var(--maybe); }
+  .state button.on[data-s=descarto] { background:var(--no); color:#fff; border-color:var(--no); }
+  .sub { display:flex; justify-content:space-between; align-items:center; font-weight:600; }
+  .x { border:none; background:none; color:var(--mut); padding:0 4px; }
+  .total { font-size:28px; font-weight:700; }
+  table { width:100%; border-collapse:collapse; } td { padding:3px 0; } td:last-child { text-align:right; }
+  .bar { height:8px; border-radius:4px; background:var(--bd); overflow:hidden; margin:6px 0; }
+  .bar > div { height:100%; background:var(--ok); } .bar.over > div { background:var(--no); }
+  .mut { color:var(--mut); } .over-t { color:var(--no); font-weight:600; } .ok-t { color:var(--ok); font-weight:600; }
+  #ai-out { white-space:pre-wrap; margin-top:10px; }
+  label.f { display:grid; gap:3px; font-size:12px; color:var(--mut); }
+  .sizes { display:grid; gap:4px; }
+  .sz { display:grid; grid-template-columns:1fr 64px 24px; gap:4px; align-items:center; }
+  .sz input { width:100%; padding:3px 6px; }
+  .addsz { font-size:12px; padding:3px 0; }
+  .hint { font-size:12px; color:var(--mut); margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛍️ Pedido de ropa</h1>
+  <button id="b-add">+ Prenda</button>
+  <button id="b-csv">CSV (todo)</button>
+  <button id="b-json">Guardar backup</button>
+  <button id="b-load">Cargar backup</button>
+  <input type="file" id="f-load" accept=".json" hidden>
+  <button id="b-clear">Vaciar todo</button>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>Pegar mensajes de WhatsApp</h2>
+      <textarea id="paste" rows="5" placeholder="Pegá acá el texto del chat. Una prenda por línea o por mensaje, ej:&#10;Remera oversize negra $12.500 talle M, L&#10;Jean mom azul - 28000"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="b-parse" class="primary">Detectar prendas y precios</button>
+        <span class="hint">Las fotos las agregás después a cada prenda: clic en el recuadro, o pegá con Ctrl+V / arrastrá la imagen encima.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="margin:0;margin-right:auto">Prendas (<span id="count">0</span>)</h2>
+        <select id="filter">
+          <option value="all">Todas</option><option value="quedo">Me quedo</option>
+          <option value="dudo">Dudo</option><option value="descarto">Descarto</option>
+        </select>
+        <select id="sort">
+          <option value="orden">Orden de carga</option><option value="precio-asc">Precio ↑</option>
+          <option value="precio-desc">Precio ↓</option><option value="prio">Prioridad</option>
+        </select>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Total</h2>
+      <div class="total" id="total">$0</div>
+      <div class="mut" id="total-note"></div>
+      <div class="bar" id="bar"><div style="width:0"></div></div>
+      <div id="budget-msg"></div>
+      <table style="margin-top:10px">
+        <tr><td>Me quedo</td><td id="t-quedo"></td></tr>
+        <tr><td>Dudo (si las sumás)</td><td id="t-dudo"></td></tr>
+        <tr><td>Total con todo menos descartes</td><td id="t-all"></td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Compra final</h2>
+      <div class="hint" style="margin:0 0 8px">Solo las prendas en "Me quedo", con talles, cantidades y total.</div>
+      <div class="row">
+        <button id="b-copy" class="primary">Copiar para WhatsApp</button>
+        <button id="b-buycsv">Descargar CSV</button>
+        <button id="b-print">Imprimir / PDF</button>
+      </div>
+      <div id="copy-msg" class="hint"></div>
+    </div>
+
+    <div class="card">
+      <h2>Ajustes</h2>
+      <div class="two">
+        <label class="f">Presupuesto máx.<input type="number" id="budget" min="0"></label>
+        <label class="f">Envío<input type="number" id="ship" min="0"></label>
+        <label class="f">Descuento %<input type="number" id="disc" min="0" max="100"></label>
+        <label class="f">Moneda<input id="cur" maxlength="4"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="b-suggest">Sugerir qué sacar</button>
+      </div>
+      <div class="hint">Si te pasás del presupuesto, saca primero lo de menor prioridad entre las prendas "dudo" y luego entre las que te quedás.</div>
+      <div id="suggest-out" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Asistente IA</h2>
+      <label class="f">API key de Anthropic (se guarda solo en este navegador)
+        <input type="password" id="key" placeholder="sk-ant-..."></label>
+      <label class="f" style="margin-top:8px">Contexto (opcional)
+        <textarea id="ctx" rows="2" placeholder="Ej: soy hombre, uso talle M, es para el trabajo y salidas casuales"></textarea></label>
+      <div class="row" style="margin-top:8px">
+        <button id="b-ai" class="primary">Ayudame a elegir</button>
+      </div>
+      <div class="hint">Manda las prendas (con fotos) y el presupuesto a Claude. Te dice qué combina, qué sobra y arma outfits.</div>
+      <div id="ai-out"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY = 'pedido-ropa-v1';
+let S = { items: [], budget: 0, ship: 0, disc: 0, cur: '$', ctx: '' };
+let uid = 0;
+
+try { const r = JSON.parse(localStorage.getItem(KEY)); if (r) S = { ...S, ...r }; } catch {}
+uid = S.items.reduce((m, i) => Math.max(m, i.id), 0);
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { alert('No se pudo guardar (almacenamiento lleno). Hacé un backup.'); } };
+
+const fmt = n => S.cur + ' ' + Math.round(n).toLocaleString('es-AR');
+const qty = i => i.talles.length ? i.talles.reduce((a, t) => a + (+t.c || 0), 0) : 1;
+const lineTotal = i => (+i.precio || 0) * qty(i);
+const sizesTxt = i => i.talles.filter(t => t.t || t.c).map(t => `${t.t || 'sin talle'} x${+t.c || 0}`).join(', ');
+const newItem = (o = {}) => ({ id: ++uid, nombre: '', precio: 0, talles: [{ t: '', c: 1 }], color: '', prio: 3, estado: 'dudo', img: '', ...o });
+// migrar datos viejos (talle + cant) al formato por talle
+S.items.forEach(i => { if (!i.talles) { i.talles = [{ t: i.talle || '', c: +i.cant || 1 }]; delete i.talle; delete i.cant; } });
+
+function sums() {
+  const q = S.items.filter(i => i.estado === 'quedo').reduce((a, i) => a + lineTotal(i), 0);
+  const d = S.items.filter(i => i.estado === 'dudo').reduce((a, i) => a + lineTotal(i), 0);
+  return { q, d };
+}
+const withExtras = sub => sub * (1 - (+S.disc || 0) / 100) + (sub > 0 ? (+S.ship || 0) : 0);
+
+function render() {
+  $('#budget').value = S.budget || ''; $('#ship').value = S.ship || '';
+  $('#disc').value = S.disc || ''; $('#cur').value = S.cur; $('#ctx').value = S.ctx || '';
+  $('#count').textContent = S.items.length;
+  const f = $('#filter').value, so = $('#sort').value;
+  let list = S.items.filter(i => f === 'all' || i.estado === f);
+  if (so === 'precio-asc') list.sort((a, b) => lineTotal(a) - lineTotal(b));
+  if (so === 'precio-desc') list.sort((a, b) => lineTotal(b) - lineTotal(a));
+  if (so === 'prio') list.sort((a, b) => b.prio - a.prio);
+  $('#grid').innerHTML = list.map(i => `
+    <div class="item ${i.estado}" data-id="${i.id}">
+      <div class="photo" data-act="photo">${i.img ? `<img src="${i.img}">` : 'Clic, pegar o arrastrar foto'}</div>
+      <div class="body">
+        <input data-k="nombre" placeholder="Prenda" value="${esc(i.nombre)}">
+        <div class="two">
+          <input data-k="precio" type="number" min="0" placeholder="Precio c/u" value="${i.precio || ''}">
+          <input data-k="color" placeholder="Color" value="${esc(i.color)}">
+        </div>
+        <div class="sizes">
+          ${i.talles.map((t, n) => `<div class="sz"><input data-sk="t" data-n="${n}" placeholder="Talle" value="${esc(t.t)}"><input data-sk="c" data-n="${n}" type="number" min="0" title="Cantidad" value="${t.c}"><button class="x" data-act="delsz" data-n="${n}" title="Quitar talle">✕</button></div>`).join('')}
+          <button class="addsz" data-act="addsz">+ talle</button>
+        </div>
+        <label class="f">Prioridad: ${'★'.repeat(i.prio)}<input data-k="prio" type="range" min="1" max="5" value="${i.prio}"></label>
+        <div class="state">${['quedo', 'dudo', 'descarto'].map(s => `<button data-act="estado" data-s="${s}" class="${i.estado === s ? 'on' : ''}">${{ quedo: 'Me quedo', dudo: 'Dudo', descarto: 'Descarto' }[s]}</button>`).join('')}</div>
+        <div class="sub"><span>${fmt(lineTotal(i))}</span><button class="x" data-act="del" title="Borrar">🗑</button></div>
+      </div>
+    </div>`).join('') || '<div class="mut">Todavía no hay prendas. Pegá el chat o tocá "+ Prenda".</div>';
+  totals();
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function totals() {
+  const { q, d } = sums();
+  const tq = withExtras(q);
+  $('#total').textContent = fmt(tq);
+  $('#total-note').textContent = `Subtotal ${fmt(q)}` + (S.disc ? ` − ${S.disc}%` : '') + (S.ship && q ? ` + envío ${fmt(S.ship)}` : '') + ' (solo "me quedo")';
+  $('#t-quedo').textContent = fmt(tq);
+  $('#t-dudo').textContent = fmt(d);
+  $('#t-all').textContent = fmt(withExtras(q + d));
+  const b = +S.budget || 0, bar = $('#bar');
+  if (b) {
+    const pct = Math.min(100, tq / b * 100);
+    bar.firstElementChild.style.width = pct + '%'; bar.classList.toggle('over', tq > b);
+    $('#budget-msg').innerHTML = tq > b ? `<span class="over-t">Te pasás por ${fmt(tq - b)}</span>` : `<span class="ok-t">Te quedan ${fmt(b - tq)}</span>`;
+  } else { bar.firstElementChild.style.width = '0'; $('#budget-msg').textContent = ''; }
+}
+
+// --- eventos de la grilla
+$('#grid').addEventListener('input', e => {
+  const it = byId(e.target.closest('.item'));
+  const sk = e.target.dataset.sk;
+  if (sk) {
+    it.talles[+e.target.dataset.n][sk] = sk === 'c' ? +e.target.value : e.target.value;
+    save(); totals(); e.target.closest('.item').querySelector('.sub span').textContent = fmt(lineTotal(it)); return;
+  }
+  const k = e.target.dataset.k; if (!k) return;
+  it[k] = e.target.type === 'number' || e.target.type === 'range' ? +e.target.value : e.target.value;
+  save(); totals();
+  if (k === 'prio') e.target.closest('label').firstChild.textContent = 'Prioridad: ' + '★'.repeat(it.prio);
+  const sub = e.target.closest('.item').querySelector('.sub span'); if (sub) sub.textContent = fmt(lineTotal(it));
+});
+$('#grid').addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const el = a.closest('.item'), it = byId(el);
+  if (a.dataset.act === 'estado') { it.estado = a.dataset.s; save(); render(); }
+  if (a.dataset.act === 'addsz') { it.talles.push({ t: '', c: 1 }); save(); render(); document.querySelector(`.item[data-id="${it.id}"] .sz:last-of-type [data-sk=t]`)?.focus(); return; }
+  if (a.dataset.act === 'delsz') { it.talles.splice(+a.dataset.n, 1); save(); render(); return; }
+  if (a.dataset.act === 'del') { S.items = S.items.filter(x => x !== it); save(); render(); }
+  if (a.dataset.act === 'photo') {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = () => inp.files[0] && setPhoto(it, inp.files[0]); inp.click();
+  }
+});
+const byId = el => S.items.find(i => i.id === +el.dataset.id);
+
+// --- fotos: clic, arrastrar, o pegar (Ctrl+V sobre la tarjeta o con el mouse encima)
+let hover = null;
+$('#grid').addEventListener('mouseover', e => { hover = e.target.closest('.item'); });
+$('#grid').addEventListener('dragover', e => e.preventDefault());
+$('#grid').addEventListener('drop', e => {
+  const el = e.target.closest('.item'); if (!el) return;
+  e.preventDefault(); const f = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+  if (f) setPhoto(byId(el), f);
+});
+document.addEventListener('paste', e => {
+  const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith('image/'));
+  if (f && hover) { e.preventDefault(); setPhoto(byId(hover), f); }
+});
+function setPhoto(it, file) {
+  const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => {
+    const sc = Math.min(1, 640 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = img.width * sc; c.height = img.height * sc;
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    it.img = c.toDataURL('image/jpeg', .75); URL.revokeObjectURL(url); save(); render();
+  };
+  img.src = url;
+}
+
+// --- parser de texto de WhatsApp
+function parseChat(text) {
+  const out = [];
+  for (let raw of text.split(/\r?\n/)) {
+    // quitar prefijo de WhatsApp: "[12/3/24, 10:15] Nombre:" o "12/3/24, 10:15 - Nombre:"
+    let line = raw.replace(/^\[?\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}(:\d{2})?(\s?[ap]\.?\s?m\.?)?\]?\s*-?\s*[^:]{1,40}:\s*/i, '').trim();
+    if (!line || /omitido|omitted|<adjunto|\.jpg|\.jpeg/i.test(line)) continue;
+    const m = line.match(/(?:\$|ars|usd|u\$s)\s*([\d.,]+)|([\d]{1,3}(?:[.,]\d{3})+|\d{4,})\b/i);
+    if (!m) continue;
+    const num = (m[1] || m[2]).replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.');
+    const precio = parseFloat(num); if (!precio) continue;
+    const talle = (line.match(/talle[s]?:?\s*([A-Za-z0-9 ,\/y]+?)(?=$|[-–·|(])/i) || [])[1]?.trim() || '';
+    let nombre = line.replace(m[0], '').replace(/talle[s]?:?\s*[A-Za-z0-9 ,\/y]+/i, '').replace(/[-–·|:]+\s*$/g, '').replace(/^[-–·*•\s]+/, '').replace(/\s{2,}/g, ' ').trim();
+    const talles = talle ? talle.split(/\s*(?:,|\/|\by\b)\s*/i).filter(Boolean).map(t => ({ t: t.toUpperCase(), c: 1 })) : [{ t: '', c: 1 }];
+    out.push(newItem({ nombre: nombre || 'Prenda', precio, talles }));
+  }
+  return out;
+}
+$('#b-parse').onclick = () => {
+  const found = parseChat($('#paste').value);
+  if (!found.length) return alert('No encontré líneas con precio. Revisá el texto o agregá las prendas a mano.');
+  S.items.push(...found); $('#paste').value = ''; save(); render();
+};
+
+// --- ajustes
+for (const [id, k, num] of [['#budget', 'budget', 1], ['#ship', 'ship', 1], ['#disc', 'disc', 1], ['#cur', 'cur', 0], ['#ctx', 'ctx', 0]])
+  $(id).addEventListener('input', e => { S[k] = num ? +e.target.value : e.target.value; save(); totals(); });
+$('#filter').onchange = $('#sort').onchange = render;
+$('#b-add').onclick = () => { S.items.push(newItem()); save(); render(); };
+$('#b-clear').onclick = () => { if (confirm('¿Borrar todo el pedido?')) { S.items = []; save(); render(); } };
+
+// --- sugerir qué sacar (regla simple)
+$('#b-suggest').onclick = () => {
+  const out = $('#suggest-out'), b = +S.budget;
+  if (!b) { out.textContent = 'Poné un presupuesto primero.'; return; }
+  const cands = S.items.filter(i => i.estado !== 'descarto')
+    .sort((a, b2) => (a.estado === 'dudo') !== (b2.estado === 'dudo') ? (a.estado === 'dudo' ? -1 : 1) : a.prio - b2.prio || lineTotal(b2) - lineTotal(a));
+  let cur = withExtras(S.items.filter(i => i.estado !== 'descarto').reduce((a, i) => a + lineTotal(i), 0));
+  if (cur <= b) { out.innerHTML = `<span class="ok-t">Con todo lo que no descartaste (${fmt(cur)}) entrás en el presupuesto.</span>`; return; }
+  const drop = [];
+  for (const i of cands) { if (cur <= b) break; drop.push(i); cur = withExtras(S.items.filter(x => x.estado !== 'descarto' && !drop.includes(x)).reduce((a, x) => a + lineTotal(x), 0)); }
+  out.innerHTML = (cur <= b ? '' : '<div class="over-t">Aun sacando todo no llegás.</div>') +
+    `<div>Para entrar en ${fmt(b)} sacaría:</div><ul>${drop.map(i => `<li>${esc(i.nombre || 'Prenda')} — ${fmt(lineTotal(i))} (${i.estado}, ${'★'.repeat(i.prio)})</li>`).join('')}</ul><div>Quedarías en ${fmt(cur)}.</div>`;
+};
+
+// --- IA
+try { $('#key').value = localStorage.getItem('pedido-ropa-key') || ''; } catch {}
+$('#key').addEventListener('input', e => { try { localStorage.setItem('pedido-ropa-key', e.target.value); } catch {} });
+$('#b-ai').onclick = async () => {
+  const key = $('#key').value.trim(), out = $('#ai-out');
+  if (!key) return out.textContent = 'Pegá tu API key de Anthropic arriba.';
+  const items = S.items.filter(i => i.estado !== 'descarto');
+  if (!items.length) return out.textContent = 'No hay prendas para analizar.';
+  const content = [];
+  items.forEach((i, n) => {
+    if (i.img) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: i.img.split(',')[1] } });
+    content.push({ type: 'text', text: `Prenda ${n + 1}${i.img ? ' (foto arriba)' : ''}: ${i.nombre || 'sin nombre'} | ${fmt(+i.precio || 0)} c/u | talles y cantidades: ${sizesTxt(i) || '?'} | color ${i.color || '?'} | prioridad ${i.prio}/5 | estado actual: ${i.estado}` });
+  });
+  content.push({ type: 'text', text: `Presupuesto: ${S.budget ? fmt(S.budget) : 'sin límite'}. Envío: ${fmt(S.ship || 0)}. Descuento: ${S.disc || 0}%.\nContexto: ${S.ctx || 'no indicado'}.\n\nAyudame a elegir qué quedarme de este pedido. Respondé en español, conciso: 1) qué prendas me conviene quedarme y cuáles sacar (con el total resultante), 2) 2 o 3 outfits combinando las que quedan, 3) prendas que no combinan con nada o están repetidas.` });
+  $('#b-ai').disabled = true; out.textContent = 'Pensando…';
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 1500, messages: [{ role: 'user', content }] })
+    });
+    const j = await r.json();
+    out.textContent = r.ok ? j.content.map(c => c.text || '').join('') : 'Error: ' + (j.error?.message || r.status);
+  } catch (e) { out.textContent = 'Error de red: ' + e.message; }
+  $('#b-ai').disabled = false;
+};
+
+// --- exportar / backup
+const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
+const csvRows = items => [['Prenda', 'Color', 'Talle', 'Cantidad', 'Precio c/u', 'Prioridad', 'Estado', 'Subtotal']].concat(
+  items.flatMap(i => (i.talles.length ? i.talles : [{ t: '', c: 1 }]).map(t => [i.nombre, i.color, t.t, t.c, i.precio, i.prio, i.estado, (+i.precio || 0) * (+t.c || 0)])));
+const toCsv = rows => '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+$('#b-csv').onclick = () => dl('pedido-completo.csv', toCsv(csvRows(S.items)), 'text/csv');
+
+// --- compra final (solo "me quedo")
+const buyItems = () => S.items.filter(i => i.estado === 'quedo');
+function buyText() {
+  const items = buyItems(); if (!items.length) return '';
+  const sub = items.reduce((a, i) => a + lineTotal(i), 0);
+  const lines = items.map(i => `• ${i.nombre || 'Prenda'}${i.color ? ' (' + i.color + ')' : ''} — ${sizesTxt(i) || 'sin talle'} — ${fmt(i.precio)} c/u = ${fmt(lineTotal(i))}`);
+  lines.push('', `Subtotal: ${fmt(sub)}`);
+  if (S.disc) lines.push(`Descuento ${S.disc}%: −${fmt(sub * S.disc / 100)}`);
+  if (S.ship) lines.push(`Envío: ${fmt(S.ship)}`);
+  lines.push(`TOTAL: ${fmt(withExtras(sub))}`);
+  return lines.join('\n');
+}
+function needBuy() { if (buyItems().length) return true; $('#copy-msg').textContent = 'Marcá al menos una prenda como "Me quedo".'; return false; }
+$('#b-copy').onclick = async () => {
+  if (!needBuy()) return;
+  try { await navigator.clipboard.writeText(buyText()); $('#copy-msg').textContent = 'Copiado. Pegalo en WhatsApp.'; }
+  catch { prompt('Copiá el texto:', buyText()); }
+};
+$('#b-buycsv').onclick = () => {
+  if (!needBuy()) return;
+  const items = buyItems(), sub = items.reduce((a, i) => a + lineTotal(i), 0);
+  const rows = csvRows(items).map(r => r.slice(0, 5).concat(r.slice(7)));
+  rows.push([], ['Subtotal', '', '', '', '', sub], ['Descuento %', '', '', '', '', S.disc || 0], ['Envío', '', '', '', '', S.ship || 0], ['TOTAL', '', '', '', '', withExtras(sub)]);
+  dl('compra-final.csv', toCsv(rows), 'text/csv');
+};
+$('#b-print').onclick = () => {
+  if (!needBuy()) return;
+  const items = buyItems(), sub = items.reduce((a, i) => a + lineTotal(i), 0);
+  const w = window.open('', '_blank');
+  w.document.write(`<title>Compra final</title><style>body{font:14px system-ui;margin:24px}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:6px;text-align:left}td:last-child,th:last-child{text-align:right}img{height:48px}</style>
+  <h2>Compra final</h2><table><tr><th></th><th>Prenda</th><th>Talles</th><th>Precio c/u</th><th>Subtotal</th></tr>
+  ${items.map(i => `<tr><td>${i.img ? `<img src="${i.img}">` : ''}</td><td>${esc(i.nombre)}${i.color ? ' (' + esc(i.color) + ')' : ''}</td><td>${esc(sizesTxt(i))}</td><td>${fmt(i.precio)}</td><td>${fmt(lineTotal(i))}</td></tr>`).join('')}
+  </table><p>Subtotal: ${fmt(sub)}${S.disc ? '<br>Descuento ' + S.disc + '%' : ''}${S.ship ? '<br>Envío: ' + fmt(S.ship) : ''}</p><h3>TOTAL: ${fmt(withExtras(sub))}</h3>`);
+  w.document.close(); w.focus(); w.print();
+};
+$('#b-json').onclick = () => dl('pedido-backup.json', JSON.stringify(S), 'application/json');
+$('#b-load').onclick = () => $('#f-load').click();
+$('#f-load').onchange = async e => {
+  try { S = { ...S, ...JSON.parse(await e.target.files[0].text()) }; uid = S.items.reduce((m, i) => Math.max(m, i.id), 0); save(); render(); }
+  catch { alert('Archivo inválido'); }
+};
+
+render();
+</script>
+</body>
+</html>
