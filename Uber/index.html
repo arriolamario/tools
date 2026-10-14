@@ -64,6 +64,16 @@
   <div class="k" id="saldoRep" style="margin-top:6px"></div>
 </div>
 
+<h2>Hoy: cuánto apartar</h2>
+<div class="card">
+  <div class="k" id="hoyFecha"></div>
+  <div class="v ok" id="hoyApartar">$0</div>
+  <div class="k" id="hoyDetalle"></div>
+</div>
+
+<h2>Por día</h2>
+<div class="card" id="dias"></div>
+
 <h2>Agregar movimiento</h2>
 <div class="card">
   <div class="seg">
@@ -136,6 +146,31 @@ function render() {
   $('barra').className = rep > apart ? 'over' : '';
   const saldo = apart - rep;
   $('saldoRep').textContent = saldo >= 0 ? `Te queda ${money(saldo)} del fondo` : `Te pasaste ${money(-saldo)} del fondo`;
+
+  const h = hoy();
+  const hi = db.items.filter(i => i.fecha === h);
+  const hIng = hi.filter(i => i.tipo === 'ingreso').reduce((s, i) => s + i.monto, 0);
+  const hGas = hi.filter(i => i.tipo === 'gasto').reduce((s, i) => s + i.monto, 0);
+  $('hoyFecha').textContent = 'Hoy ' + h + ' · ' + db.pct + '% de tus ingresos';
+  $('hoyApartar').textContent = money(hIng * db.pct / 100);
+  $('hoyDetalle').textContent = `Ingresos ${money(hIng)} · Gastos ${money(hGas)} · Neta ${money(hIng - hGas)}`;
+
+  const porDia = {};
+  items.forEach(i => {
+    const d = porDia[i.fecha] || (porDia[i.fecha] = { ing: 0, gas: 0 });
+    d[i.tipo === 'ingreso' ? 'ing' : 'gas'] += i.monto;
+  });
+  const dias = Object.keys(porDia).sort().reverse();
+  const max = Math.max(1, ...dias.map(d => porDia[d].ing));
+  $('dias').innerHTML = dias.length ? dias.map(d => {
+    const { ing: di, gas: dg } = porDia[d];
+    const ap = di * db.pct / 100;
+    return `<div class="row" style="display:block">
+      <div style="display:flex;justify-content:space-between"><b>${d.slice(8)}/${d.slice(5, 7)}</b><span>Apartar <b>${money(ap)}</b></span></div>
+      <div class="bar"><i style="width:${di / max * 100}%"></i></div>
+      <small>Ingresos ${money(di)} · Gastos ${money(dg)} · Neta ${money(di - dg)}</small>
+    </div>`;
+  }).join('') : '<div class="k">Sin datos este mes.</div>';
 
   $('lista').innerHTML = items.length ? items.map(i => `
     <div class="row">
